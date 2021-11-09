@@ -1,0 +1,10 @@
+frontend szkcompany
+  bind *:80
+  mode tcp
+  default_backend alinland
+
+backend alinland
+  mode tcp
+{% for server in groups["webservers"]  %}
+  server {{ server }} {{ hostvars[server].ansible_facts.all_ipv4_addresses[0] }} check
+{% endfor %}

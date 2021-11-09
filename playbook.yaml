@@ -1,0 +1,196 @@
+---
+## ----------------------------------------
+## install nginx and php-fpm on web servers
+## ----------------------------------------
+  - hosts: webservers
+    tasks:
+      - name: yum install epel
+        yum: 
+          name: epel-release.noarch 
+          state: latest
+
+      - name: yum install nginx
+        yum:
+          name: nginx
+          state: latest
+  
+      - name: download remi repo rpm
+        get_url: 
+          url: http://rpms.remirepo.net/enterprise/remi-release-7.rpm 
+          dest: /root/  
+  
+      - name: install remi repo rpm
+        yum: 
+          name: /root/remi-release-7.rpm 
+          state: present
+  
+      - name: install php
+        yum: 
+          enablerepo: remi,remi-php74
+          name: php,php-fpm,php-mcrypt,php-curl,php-cli,php-mysql,php-gd,php-xsl,php-json,php-intl,php-pear,php-devel,php-mbstring,php-zip,php-soap
+## ---------------------------
+## change variable in php.ini 
+## --------------------------
+
+      - name: change php memorylimit
+        community.general.ini_file: 
+          path: /etc/php.ini
+          section: PHP
+          option: memory_limit
+          value: 512M
+
+      - name: change php 
+        community.general.ini_file:
+          path: /etc/php.ini
+          section: PHP
+          option: zlib.output_compression
+          value: On
+
+      - name: change php max_execution_time
+        community.general.ini_file:
+          path: /etc/php.ini
+          section: PHP
+          option: max_execution_time 
+          value: 1800
+
+      - name: change php-fpm listen
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: listen
+          value: /var/run/php/php-fpm.sock
+
+      - name: change php-fpm user listen
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: 'listen.owner'
+          value: nginx
+
+      - name: change php-fpm group listen
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: 'listen.group'
+          value: nginx
+
+      - name: change php-fpm listen mode
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: listen.mode
+          value: '0660'
+
+      - name: change php-fpm user
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: user
+          value: nginx
+
+      - name: change php-fpm group
+        community.general.ini_file:
+          path: /etc/php-fpm.d/www.conf
+          section: www
+          option: group
+          value: nginx
+
+      - name: create directory for php-fpm in /var/lib/php/
+        file:
+          path: /var/lib/php/session/
+          state: directory
+          recurse: yes
+          owner: nginx
+          group: nginx
+
+      - name: create directory for php-fpm in /var/lib/php/
+        file:
+          path: /run/php/
+          state: directory
+          recurse: yes
+          owner: nginx
+          group: nginx
+
+
+      - name: enable nginx service 
+        ansible.builtin.service: 
+          name: nginx
+          enabled: yes
+          state: started
+
+      - name: enable nginx service
+        ansible.builtin.service:
+          name: php-fpm
+          enabled: yes
+          state: started
+## ----------------------
+## disable selinux
+## ----------------------
+
+      - name: Disable SELinux
+        selinux:
+          state: disabled
+
+      - name: enable 80 and 443 
+        ansible.posix.firewalld:
+          zone: public
+          port: 80-443/tcp
+          permanent: true
+          state: enabled
+
+      - name: install ca certificate
+        yum:
+          name: ca-certificates
+          state: latest
+
+      - name: update ca
+        shell: update-ca-trust force-enable
+
+## ----------------------
+## install composer
+## ----------------------
+      - name: Download and install Composer
+        shell: curl -sS https://getcomposer.org/installer | php
+        args:
+          chdir: /usr/src/
+          creates: /usr/local/bin/composer
+          warn: false
+        become: yes
+      - name: Add Composer to global path
+        copy:
+          dest: /usr/local/bin/composer
+          group: root
+          mode: '0755'
+          owner: root
+          src: /usr/src/composer.phar
+          remote_src: yes
+        become: yes
+## ----------------------
+## reboot servers 
+## ----------------------
+      - name: reboot webservers for selinux setup
+        reboot:
+## ----------------------------------------
+## install haproxy on haproxy servers
+## ----------------------------------------
+  - hosts: haproxy
+    tasks:
+      - name: install hapeoxy on servers
+        yum:
+          name: haproxy
+          state: latest
+## ----------------------
+## create haproxy config
+## ----------------------
+  - hosts: webservers
+    tasks:
+      - name: gatther data from web servers
+        gather_facts:
+
+  - hosts: haproxy
+    tasks:
+      - name: generate temp file
+        template:
+          src: ./haproxy.conf.j2
+          dest: /etc/haproxy/haproxy.cfg
+
